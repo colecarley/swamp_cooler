@@ -39,11 +39,13 @@ volatile unsigned int *my_ADC_DATA = (unsigned int *)0x78;
 #define RUNNING_PIN 0  // BLUE
 #define DISABLED_PIN 3 // YELLOW
 #define FAN_PIN 6
-#define RESET_PIN 26
-#define ON_OFF_PIN 27
+#define RESET_PIN 4
+#define ON_OFF_PIN 5
 
 #define POWER_PIN 7
-#define VENT_PIN 69
+
+// changing vent pin to PA7
+#define VENT_PIN 7
 #define DHT11_PIN 6
 
 #define TBE 0x20
@@ -104,7 +106,8 @@ void setup()
     // initialize the DHT11
     adc_init();
 
-    set_pb_as_input(VENT_PIN);
+    // set_pb_as_input(VENT_PIN);
+    set_pa_as_input(VENT_PIN);
     // pinMode(14, INPUT);
 
     write_pb(POWER_PIN, LOW);
@@ -115,17 +118,19 @@ void loop()
     put((unsigned char)'A');
     my_delay(1000);
 
-    char result = digitalRead(VENT_PIN);
-    if (result)
-    {
-        motor_clockwise = !motor_clockwise;
-        myStepper.setSpeed(10);
-        myStepper.step(steps_per_revolution > 0 ? steps_per_revolution : -steps_per_revolution);
-        my_delay(1000);
-    }
-
     if (state != State::DISABLED)
+    {
+        unsigned char result = read_pa(VENT_PIN);
+        if (result)
+        {
+            motor_clockwise = !motor_clockwise;
+            myStepper.setSpeed(10);
+            myStepper.step(steps_per_revolution > 0 ? steps_per_revolution : -steps_per_revolution);
+            my_delay(1000);
+        }
+
         handle_not_disabled();
+    }
 
     if (state == State::DISABLED)
         handle_disabled();
@@ -170,7 +175,7 @@ void handle_running()
     }
 
     // TODO: watch for button press to disable
-    int on_off_button = digitalRead(ON_OFF_PIN);
+    unsigned char on_off_button = read_pa(ON_OFF_PIN);
     if (on_off_button)
     {
         put((unsigned char *)"on/off button clicked inside running handler\n");
@@ -190,6 +195,8 @@ void handle_running()
 
     // turn on fan
     write_pa(FAN_PIN, HIGH);
+
+    put((unsigned char *)"got to the end of the running handler\n");
 }
 
 void handle_idle()
@@ -208,7 +215,7 @@ void handle_idle()
         return;
     }
 
-    int on_off_button = digitalRead(ON_OFF_PIN);
+    unsigned char on_off_button = read_pa(ON_OFF_PIN);
     if (on_off_button)
     {
         state = State::DISABLED;
@@ -233,7 +240,7 @@ void handle_disabled()
 {
     put((unsigned char *)"DISABLED\n");
 
-    int on_off_button = digitalRead(ON_OFF_PIN);
+    unsigned char on_off_button = read_pa(ON_OFF_PIN);
     if (on_off_button)
     {
         put((unsigned char *)"on/off button clicked inside disabled handler\n");
@@ -260,7 +267,7 @@ void handle_error()
 {
     put((unsigned char *)"ERROR\n");
 
-    int reset_button = digitalRead(RESET_PIN);
+    unsigned char reset_button = read_pa(RESET_PIN);
     if (reset_button)
     {
         put((unsigned char *)"reset button clicked inside error handler\n");
@@ -268,7 +275,7 @@ void handle_error()
         return;
     }
 
-    int on_off_button = digitalRead(ON_OFF_PIN);
+    unsigned char on_off_button = read_pa(ON_OFF_PIN);
     if (on_off_button)
     {
         put((unsigned char *)"on/off button clicked inside error handler\n");
@@ -354,6 +361,16 @@ void write_pb(unsigned char pin_num, unsigned char state)
 void write_pa(unsigned char pin_num, unsigned char state)
 {
     state ? (*port_a |= 0x01 << pin_num) : (*port_a &= ~(0x01 << pin_num));
+}
+
+unsigned char read_pb(unsigned char pin_num)
+{
+    return *pin_b & (0x01 << pin_num);
+}
+
+unsigned char read_pa(unsigned char pin_num)
+{
+    return *pin_a & (0x01 << pin_num);
 }
 
 void U0Init(int U0baud)
