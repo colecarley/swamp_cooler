@@ -23,6 +23,10 @@ volatile unsigned char *port_a = (unsigned char *)0x22;
 volatile unsigned char *ddr_a = (unsigned char *)0x21;
 volatile unsigned char *pin_a = (unsigned char *)0x20;
 
+volatile unsigned char *port_d = (unsigned char *)0x2B;
+volatile unsigned char *ddr_d = (unsigned char *)0x2A;
+volatile unsigned char *pin_d = (unsigned char *)0x29;
+
 volatile unsigned char *myUCSR0A = (unsigned char *)0x00C0;
 volatile unsigned char *myUCSR0B = (unsigned char *)0x00C1;
 volatile unsigned char *myUCSR0C = (unsigned char *)0x00C2;
@@ -40,7 +44,7 @@ volatile unsigned int *my_ADC_DATA = (unsigned int *)0x78;
 #define DISABLED_PIN 3 // YELLOW
 #define FAN_PIN 6
 #define RESET_PIN 4
-#define ON_OFF_PIN 5
+#define ON_OFF_PIN 19
 
 #define POWER_PIN 7
 
@@ -92,10 +96,10 @@ void setup()
     set_pa_as_output(DISABLED_PIN);
     // set reset pin PA5 as input
     set_pa_as_input(RESET_PIN);
-    // set on/off pin PA6 as input
-    set_pa_as_input(ON_OFF_PIN);
     // set fan pin PA7 as output
     set_pa_as_output(FAN_PIN);
+
+    set_pd_as_input(ON_OFF_PIN, 1);
 
     // initialize the LCD
     lcd.begin(16, 2);
@@ -106,11 +110,27 @@ void setup()
     // initialize the DHT11
     adc_init();
 
+    // attach on/off button interrupt
+    attachInterrupt(digitalPinToInterrupt(ON_OFF_PIN), on_off_interrupt, RISING);
+
     // set_pb_as_input(VENT_PIN);
     set_pa_as_input(VENT_PIN);
     // pinMode(14, INPUT);
 
     write_pb(POWER_PIN, LOW);
+}
+
+void on_off_interrupt()
+{
+    put((unsigned char *)"on/off button clicked\n");
+    if (state == State::DISABLED)
+    {
+        state = State::IDLE;
+    }
+    else
+    {
+        state = State::DISABLED;
+    }
 }
 
 void loop()
@@ -147,6 +167,7 @@ void update_lcd()
 {
     put((unsigned char *)"UPDATING LCD\n");
     lcd.clear();
+    put((unsigned char *)"LCD CLEARED\n");
     lcd.setCursor(0, 0);
     lcd.print("WATER:");
     lcd.print(water_level);
@@ -156,6 +177,7 @@ void update_lcd()
     lcd.setCursor(0, 1);
     lcd.print("HUMIDITY:");
     lcd.print(humidity);
+    put((unsigned char *)"LCD UPDATED\n");
 }
 
 void handle_running()
@@ -171,16 +193,6 @@ void handle_running()
     if (temperature <= TEMPERATURE_THRESHOLD)
     {
         state = State::IDLE;
-        return;
-    }
-
-    // TODO: watch for button press to disable
-    unsigned char on_off_button = read_pa(ON_OFF_PIN);
-    if (on_off_button)
-    {
-        put((unsigned char *)"on/off button clicked inside running handler\n");
-        state = State::DISABLED;
-        my_delay(1000);
         return;
     }
 
@@ -214,15 +226,6 @@ void handle_idle()
         state = State::RUNNING;
         return;
     }
-
-    unsigned char on_off_button = read_pa(ON_OFF_PIN);
-    if (on_off_button)
-    {
-        state = State::DISABLED;
-        my_delay(1000);
-        return;
-    }
-
     // turn off running pin
     write_pa(RUNNING_PIN, LOW);
     // turn on idle pin
@@ -239,16 +242,6 @@ void handle_idle()
 void handle_disabled()
 {
     put((unsigned char *)"DISABLED\n");
-
-    unsigned char on_off_button = read_pa(ON_OFF_PIN);
-    if (on_off_button)
-    {
-        put((unsigned char *)"on/off button clicked inside disabled handler\n");
-        state = State::IDLE;
-        my_delay(1000);
-        return;
-    }
-
     // turn off running pin
     write_pa(RUNNING_PIN, LOW);
     // turn off idle pin
@@ -274,16 +267,6 @@ void handle_error()
         state = State::IDLE;
         return;
     }
-
-    unsigned char on_off_button = read_pa(ON_OFF_PIN);
-    if (on_off_button)
-    {
-        put((unsigned char *)"on/off button clicked inside error handler\n");
-        state = State::DISABLED;
-        my_delay(1000);
-        return;
-    }
-
     // turn off running pin
     write_pa(RUNNING_PIN, LOW);
     // turn off idle pin
@@ -351,6 +334,20 @@ void set_pa_as_output(unsigned char pin_num)
 void set_pa_as_input(unsigned char pin_num)
 {
     *ddr_a &= ~(0x01 << pin_num);
+}
+
+void set_pd_as_output(unsigned char pin_num)
+{
+    *ddr_d |= 0x01 << pin_num;
+}
+
+void set_pd_as_input(unsigned char pin_num, unsigned char pullup)
+{
+    *ddr_d &= ~(0x01 << pin_num);
+    if (pullup)
+    {
+        *port_d |= 0x01 << pin_num;
+    }
 }
 
 void write_pb(unsigned char pin_num, unsigned char state)
