@@ -1,5 +1,5 @@
 /*
- * Swamp cooler, implemented on an Arduino mega 2560 with no libraries
+ * Swamp cooler, implemented on an Arduino mega 2560
  * authors: Cole Carley, Madeline Veric
  * 2023-12-01
  */
@@ -7,7 +7,6 @@
 #include <dht.h>
 #include <LiquidCrystal.h>
 #include <Stepper.h>
-#include <Wire.h>
 #include "uRTCLib.h"
 
 volatile unsigned char *myTCCR1A = (unsigned char *)0x80;
@@ -293,7 +292,6 @@ void handle_not_disabled()
     unsigned char vent_button = READ(*pin_a, VENT_PIN);
     if (vent_button)
     {
-        put((unsigned char *)"vent pin pressed");
         myStepper.step(motor_clockwise ? steps_per_revolution : -steps_per_revolution);
         motor_clockwise = !motor_clockwise;
     }
