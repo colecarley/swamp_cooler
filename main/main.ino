@@ -1,5 +1,5 @@
 /*
- * Swap cooler, implemented on an Arduino mega 2560 with no libraries
+ * Swamp cooler, implemented on an Arduino mega 2560 with no libraries
  * authors: Cole Carley, Madeline Veric
  * 2023-12-01
  */
@@ -7,17 +7,16 @@
 #include <dht.h>
 #include <LiquidCrystal.h>
 #include <Stepper.h>
+#include <Wire.h>
+#include "uRTCLib.h"
 
 volatile unsigned char *myTCCR1A = (unsigned char *)0x80;
 volatile unsigned char *myTCCR1B = (unsigned char *)0x81;
-volatile unsigned char *myTCCR1C = (unsigned char *)0x82; // unused
-volatile unsigned char *myTIMSK1 = (unsigned char *)0x6F; // unsed
 volatile unsigned int *myTCNT1 = (unsigned int *)0x84;
 volatile unsigned char *myTIFR1 = (unsigned char *)0x36;
 
 volatile unsigned char *port_b = (unsigned char *)0x25;
 volatile unsigned char *ddr_b = (unsigned char *)0x24;
-volatile unsigned char *pin_b = (unsigned char *)0x23; // unused
 
 volatile unsigned char *port_a = (unsigned char *)0x22;
 volatile unsigned char *ddr_a = (unsigned char *)0x21;
@@ -25,7 +24,6 @@ volatile unsigned char *pin_a = (unsigned char *)0x20;
 
 volatile unsigned char *port_d = (unsigned char *)0x2B;
 volatile unsigned char *ddr_d = (unsigned char *)0x2A;
-volatile unsigned char *pin_d = (unsigned char *)0x29; // unused
 
 volatile unsigned char *myUCSR0A = (unsigned char *)0x00C0;
 volatile unsigned char *myUCSR0B = (unsigned char *)0x00C1;
@@ -51,7 +49,7 @@ volatile unsigned int *my_ADC_DATA = (unsigned int *)0x78;
 #define VENT_PIN 7
 #define DHT11_PIN 6
 
-#define TEMPERATURE_THRESHOLD 0   // degrees C
+#define TEMPERATURE_THRESHOLD 23  // degrees C
 #define WATER_LEVEL_THRESHOLD 100 // arbitrary units
 
 #define SET_OUTPUT(port, pin) (port |= 0x01 << pin)
@@ -61,24 +59,19 @@ volatile unsigned int *my_ADC_DATA = (unsigned int *)0x78;
 #define WRITE(port, pin, state) state ? (port |= 0x01 << pin) : (port &= ~(0x01 << pin))
 #define NEWLINE put((unsigned char)'\n')
 
-// setup the DHT11 for temperature and humidity
-dht DHT;
+dht DHT; // setup the DHT11 for temperature and humidity
 const int RS = 12, EN = 7, D4 = 5, D5 = 4, D6 = 3, D7 = 2;
 
-// setup the LCD
-LiquidCrystal lcd(RS, EN, D4, D5, D6, D7);
+LiquidCrystal lcd(RS, EN, D4, D5, D6, D7); // setup the LCD
+uRTCLib rtc;                               // setup the RTC
 
 // initialize the stepper motor for the vent
 const int steps_per_revolution = 2038;
 Stepper myStepper = Stepper(steps_per_revolution, 8, 9, 10, 11);
-bool motor_clockwise = true;
 
-int water_level = 0;
-int temperature = 0;
-int humidity = 0;
+int water_level, temperature, humidity = 0;
 
-// possible states of the system
-enum State
+enum State // possible states of the system
 {
     DISABLED,
     IDLE,
@@ -103,26 +96,36 @@ void setup()
     // initialize the LCD
     lcd.begin(16, 2);
     U0Init(9600);
+    URTCLIB_WIRE.begin();
+    rtc.set(0, 23, 5, 5, 8, 12, 23);
     adc_init();
     myStepper.setSpeed(10);
-
     attachInterrupt(digitalPinToInterrupt(ON_OFF_PIN), on_off_interrupt, RISING);
 
     WRITE(*port_b, POWER_PIN, LOW);
 }
 
+bool show_datetime[] = {true, true, true, true}; // idle, running, error, disabled
 void on_off_interrupt()
 {
     if (state == State::DISABLED)
+    {
+        update_lcd();
+        show_datetime[0] = true;
+        show_datetime[1] = true;
+        show_datetime[2] = true;
+
         state = State::IDLE;
+    }
     else
+    {
+        show_datetime[3] = true;
         state = State::DISABLED;
+    }
 }
 
 void loop()
 {
-    my_delay(1000);
-
     if (state != State::DISABLED)
         handle_not_disabled();
     if (state == State::DISABLED)
@@ -137,6 +140,7 @@ void loop()
 
 void update_lcd()
 {
+    NEWLINE;
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("WATER:");
@@ -151,13 +155,24 @@ void update_lcd()
 
 void handle_running()
 {
+    if (show_datetime[1])
+    {
+        put((unsigned char *)"running");
+        NEWLINE;
+        put_datetime();
+        show_datetime[1] = false;
+    }
+
     if (water_level < WATER_LEVEL_THRESHOLD)
     {
+        show_datetime[1] = true;
         state = State::ERROR;
         return;
     }
     if (temperature <= TEMPERATURE_THRESHOLD)
     {
+        show_datetime[1] = true;
+        update_lcd();
         state = State::IDLE;
         return;
     }
@@ -172,14 +187,25 @@ void handle_running()
 
 void handle_idle()
 {
+
+    if (show_datetime[0])
+    {
+        put((unsigned char *)"idle");
+        NEWLINE;
+        put_datetime();
+        show_datetime[0] = false;
+    }
+
     if (water_level <= WATER_LEVEL_THRESHOLD)
     {
+        show_datetime[0] = true;
         state = State::ERROR;
         return;
     }
 
     if (temperature > TEMPERATURE_THRESHOLD)
     {
+        show_datetime[0] = true;
         state = State::RUNNING;
         return;
     }
@@ -195,6 +221,14 @@ void handle_idle()
 
 void handle_disabled()
 {
+    if (show_datetime[3])
+    {
+        put((unsigned char *)"disabled");
+        NEWLINE;
+        put_datetime();
+        show_datetime[3] = false;
+    }
+
     WRITE(*port_a, RUNNING_PIN, LOW);
     WRITE(*port_a, IDLE_PIN, LOW);
     WRITE(*port_a, ERROR_PIN, LOW);
@@ -207,9 +241,19 @@ void handle_disabled()
 
 void handle_error()
 {
+    if (show_datetime[2])
+    {
+        put((unsigned char *)"error");
+        NEWLINE;
+        put_datetime();
+        show_datetime[2] = false;
+    }
+
     unsigned char reset_button = READ(*pin_a, RESET_PIN);
     if (reset_button)
     {
+        update_lcd();
+        show_datetime[2] = true;
         state = State::IDLE;
         return;
     }
@@ -232,18 +276,26 @@ void handle_error()
         lcd.print(error_msg[i]);
 }
 
+bool first = true;
+unsigned long milliseconds = 0;
+bool motor_clockwise = true;
+unsigned long last = 0;
 void handle_not_disabled()
 {
-
-    if (state != State::ERROR)
+    milliseconds = millis();
+    if (state != State::ERROR && (milliseconds - last) > 60000)
+    {
+        last = milliseconds;
+        milliseconds = 0;
         update_lcd();
+    }
 
     unsigned char vent_button = READ(*pin_a, VENT_PIN);
     if (vent_button)
     {
-        motor_clockwise = !motor_clockwise;
+        put((unsigned char *)"vent pin pressed");
         myStepper.step(motor_clockwise ? steps_per_revolution : -steps_per_revolution);
-        my_delay(1000);
+        motor_clockwise = !motor_clockwise;
     }
 
     WRITE(*port_b, POWER_PIN, HIGH);
@@ -253,15 +305,13 @@ void handle_not_disabled()
     temperature = DHT.temperature;
     humidity = DHT.humidity;
 
-    WRITE(*port_b, POWER_PIN, LOW);
+    if (first)
+    {
+        update_lcd();
+        first = false;
+    }
 
-    put((unsigned int)water_level);
-    NEWLINE;
-    put((unsigned int)temperature);
-    NEWLINE;
-    put((unsigned int)humidity);
-    NEWLINE;
-    NEWLINE;
+    WRITE(*port_b, POWER_PIN, LOW);
 }
 
 void U0Init(int U0baud)
@@ -273,6 +323,27 @@ void U0Init(int U0baud)
     *myUCSR0B = 0x18;
     *myUCSR0C = 0x06;
     *myUBRR0 = tbaud;
+}
+
+void put_datetime()
+{
+    rtc.refresh();
+    put((unsigned int)rtc.month());
+    put((unsigned char)'/');
+    put((unsigned int)rtc.day());
+    put((unsigned char)'/');
+    put((unsigned int)rtc.year());
+    put((unsigned char)' ');
+    put((unsigned int)rtc.hour());
+    put((unsigned char)':');
+    if (rtc.minute() < 10)
+        put((unsigned char)'0');
+    put((unsigned int)rtc.minute());
+    put((unsigned char)':');
+    if (rtc.second() < 10)
+        put((unsigned char)'0');
+    put((unsigned int)rtc.second());
+    NEWLINE;
 }
 
 void put(unsigned char U0pdata)
