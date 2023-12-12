@@ -7,10 +7,10 @@ This project is a swamp cooler implemented on an Arduino MEGA.
 This swamp cooler uses the components listed below to create a system that can be used to cool a room. The system is controlled by an Arduino MEGA and has a user interface that allows the user to move the vent, disable and enable the cooler, and reset the system when in an error state. There is an LCD screen attached that notifies the user of the current water level, temperature, and humidity in the room. The system will start running when the temperature is over 23 degrees celsius, and return to and idle state when the temperature dips below that threshold. When there is not enough water to cool the room, the system will enter an error state and notify the user. Functionality can be restored by refilling the water tank and resetting the system. A user can turn the system on and off using a button on the breadboard.
 
 ### Constraints
-ERROR STATE - RED LED
-RUNNING STATE - BLUE LED
-IDLE STATE - GREEN LED
-DISABLED STATE - YELLOW LED
+ERROR STATE: RED LED
+RUNNING STATE: BLUE LED
+IDLE STATE: GREEN LED
+DISABLED STATE: YELLOW LED
 
 The system will automatically enter a running state when the room temperature is above 23 degrees celsius. The water is measured in an arbitrary unit, and will enter an error state when it dips below 100 units. The system can be in a disabled state if the user turns it off using the button on the breadboard. If none of the previous states are active, the system will be in an idle state, just displaying the temperature, humidity, and water level.
 
