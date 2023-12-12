@@ -37,16 +37,20 @@ volatile unsigned int *my_ADC_DATA = (unsigned int *)0x78;
 
 #define TBE 0x20
 
+// state LEDs
 #define IDLE_PIN 2     // GREEN
 #define ERROR_PIN 1    // RED
 #define RUNNING_PIN 0  // BLUE
 #define DISABLED_PIN 3 // YELLOW
+
+// port A
 #define FAN_PIN 6
 #define RESET_PIN 4
-#define ON_OFF_PIN 19
 #define POWER_PIN 7
 #define VENT_PIN 7
 #define DHT11_PIN 6
+
+#define ON_OFF_PIN 19 // digital interrupt pin
 
 #define TEMPERATURE_THRESHOLD 23  // degrees C
 #define WATER_LEVEL_THRESHOLD 100 // arbitrary units
@@ -66,7 +70,7 @@ uRTCLib rtc;                               // setup the RTC
 
 // initialize the stepper motor for the vent
 const int steps_per_revolution = 2038;
-Stepper myStepper = Stepper(steps_per_revolution, 8, 9, 10, 11);
+Stepper myStepper = Stepper(steps_per_revolution, 8, 9, 10, 11); // port B
 
 int water_level, temperature, humidity = 0;
 
@@ -292,6 +296,9 @@ void handle_not_disabled()
     unsigned char vent_button = READ(*pin_a, VENT_PIN);
     if (vent_button)
     {
+        put((unsigned char *)"vent changing position");
+        NEWLINE;
+        put_datetime();
         myStepper.step(motor_clockwise ? steps_per_revolution : -steps_per_revolution);
         motor_clockwise = !motor_clockwise;
     }
