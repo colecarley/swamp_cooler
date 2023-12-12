@@ -15,7 +15,6 @@ IDLE STATE: GREEN LED
 
 DISABLED STATE: YELLOW LED
 
-
 The system will automatically enter a running state when the room temperature is above 23 degrees celsius. The water is measured in an arbitrary unit, and will enter an error state when it dips below 100 units. The system can be in a disabled state if the user turns it off using the button on the breadboard. If none of the previous states are active, the system will be in an idle state, just displaying the temperature, humidity, and water level.
 
 ## Github
@@ -43,7 +42,7 @@ https://github.com/colecarley/swamp_cooler/blob/main/main/main.ino
 ![](https://i.imgur.com/LZizyra.png)
 
 ## Video
-![video demonstration](https://www.youtube.com/watch?v=gsJyTYYRlOk&ab_channel=ColeCarley)
+https://www.youtube.com/watch?v=gsJyTYYRlOk&ab_channel=ColeCarley
 
 ## Photos
 ![](https://i.imgur.com/NUT4M3L.jpg)
